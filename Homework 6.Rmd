@@ -5,7 +5,214 @@ date: "2023-11-26"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+#  Libraries
+```{r}
+library(tidyverse)
+library(modelr)
+library(mgcv)
 ```
 
+
+# Problem 2
+
+### Running initial code provided: Downloading the data
+```{r setup, include=FALSE}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2022-01-01",
+    date_max = "2022-12-31") |>
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) |>
+  select(name, id, everything())
+```
+
+
+Simple linear regression
+```{r}
+fit = lm(tmax~ tmin + prcp, data=weather_df)
+summary(fit)
+
+fit |> 
+ggplot(aes(x = tmin, y = tmax)) + 
+  geom_point(alpha = .5) +
+  stat_smooth(method = "lm")
+```
+
+Initial boot-strap function
+```{r}
+boot_sample = function(df) {
+  sample_frac(df, replace = TRUE)
+}
+
+boot_sample(weather_df) |> 
+  ggplot(aes(x = tmin, y = tmax)) + 
+  geom_point(alpha = .5) +
+  stat_smooth(method = "lm")
+```
+
+Multiple boot-strap samples
+```{r}
+boot_straps = 
+  tibble(strap_number = 1:5000) |> 
+  mutate(
+    strap_sample = map(strap_number, \(i) boot_sample(df = weather_df))
+  )
+
+boot_straps
+
+boot_straps |> 
+  slice(1:3) |> 
+  mutate(strap_sample = map(strap_sample, arrange, tmin)) |> 
+  pull(strap_sample)
+
+boot_straps |> 
+  slice(1:3) |> 
+  unnest(strap_sample) |> 
+  ggplot(aes(x = tmin, y = tmax)) + 
+  geom_point(alpha = .5) +
+  stat_smooth(method = "lm", se = FALSE) +
+  facet_grid(~strap_number)
+```
+
+Analyzing Bootstrap Models?
+
+```{r}
+bootstrap_results = 
+  boot_straps |> 
+  mutate(
+    models = map(strap_sample, \(df) lm(tmax ~ tmin+prcp, data = df) ),
+    results = map(models, broom::tidy)) |> 
+  select(-strap_sample, -models) |> 
+  unnest(results) 
+
+bootstrap_results |> 
+  group_by(term) |> 
+  summarize(boot_se = sd(estimate)) |> 
+  knitr::kable(digits = 3)
+```
+
+More efficient code?
+```{r}
+boot_straps = 
+  weather_df |> 
+  modelr::bootstrap(n = 5000)
+
+boot_straps |> pull(strap) |> nth(1) |> as_tibble()
+
+weather_df2 = weather_df |> 
+  modelr::bootstrap(n = 5000) |> 
+  mutate(
+    models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df)),
+    results = map(models, broom::tidy))|> 
+  select(-strap, -models)
+)
+
+```
+
+The boostrap is helpful when you’d like to perform inference for a parameter / value / summary that doesn’t have an easy-to-write-down distribution in the usual repeated sampling framework. We’ll focus on a simple linear regression with tmax as the response with tmin and prcp as the predictors, and are interested in the distribution of two quantities estimated from these data:
+
+r^2
+log(β^1∗β^2)
+Use 5000 bootstrap samples and, for each bootstrap sample, produce estimates of these two quantities. Plot the distribution of your estimates, and describe these in words. Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r^2
+ and log(β^0∗β^1)
+. Note: broom::glance() is helpful for extracting r^2
+ from a fitted regression, and broom::tidy() (with some additional wrangling) should help in computing log(β^1∗β^2)
+.
+
+# Problem 3
+
+**Importing Data**
+```{r}
+birthweight <- read.csv("data/birthweight.csv")
+
+birthweight= 
+  birthweight |> 
+  mutate(
+    babysex = factor(babysex, levels = c(1, 2), labels = c("Male", "Female")),
+    malform= factor(malform, levels= c(0,1), labels= c("absent", "present")),
+    frace = case_when(
+      frace == 1 ~ "White",
+      frace == 2 ~ "Black",
+      frace == 3 ~ "Asian",
+      frace == 4 ~ "Puerto Rican",
+      frace == 8 ~ "Other",
+      frace == 9 ~ "Unknown",
+      TRUE ~ as.character(frace)  # Keep other values as is
+    ),
+    mrace = case_when(
+      mrace == 1 ~ "White",
+      mrace == 2 ~ "Black",
+      mrace == 3 ~ "Asian",
+      mrace == 4 ~ "Puerto Rican",
+      mrace == 8 ~ "Other",
+      TRUE ~ as.character(mrace)  # Keep other values as is
+    )
+  ) |> 
+  select(!c("pnumlbw", "pnumsga")) |> 
+  filter(menarche > 4)
+```
+**Process**: To import the data I used `read.csv`. For the data itself: babysex, frace, malform. and mrace were originally in numeric/integer form, but made more sense functionally to be treated as Factors or Character variables. Babysex and malform were converted to a binary factor while frace and mrace were converted to a string variable (since race doesn't have inherent order). I removed pnulbw and pnumgsa from the dataset as neither had any value. I did a brief combing through of the data to ensure that all observations looked relatively realistic (given that I am not an OB/GYN). I decided to limit menarche to above 4 as from brief online search 5 seems to be the earliest accepted time to have first menstration. Only excluded 1 observation with a menerache of 0 which seems like a data error, so exclusion seems optimal. 
+
+**Description of data**: The dataset describes `birthweight |> nrow()` babies with `birthweight |> nrow()` describing either the baby at birth themselves, or characteristics of their parents. Key variables include bwt: babies birthweight in grams, gaweeks: gestational age in weeks, and delwt: mother's weight at birth in lbs. 
+
+
+```{r}
+fit= lm(bwt ~ gaweeks + babysex + mheight + ppbmi + blength, data= birthweight)
+
+broom::tidy(fit)
+
+modelr::add_residuals(birthweight, fit)
+modelr::add_predictions(birthweight, fit)
+
+birthweight |> 
+  modelr::add_residuals(fit) |> 
+  modelr::add_predictions(fit) |> 
+  ggplot(aes(x= pred, y=resid))+geom_point()
+
+```
+**Modelling Process*: in order to select variables for my model, I decided to briefly search for common predictors of baby's birthweight. The general consensus was that gestational age, fetal sex, mother's height, mother's pre-pregnancy BMI, and pre-partum births were commonly associated with birthweight; therefore, I added the first four variables into my model as I had their data readily available. I also decided to add in baby's birth length since it just made sense to me that length would heavily impact height. Because outcome is continuous, I decided on using a Linear Regression model. Babysex was already coded as a factor above, so it was fine to add right into the model. The other variables were treated as continuous predictors. 
+
+**Residual Plot Description**: there does appear to be a slight pattern of the residuals with large positive residuals from 1000 to 2000 and large negative residuals from 4000 to 5000. Ideally if I was going through the full modeling process, I would want to better account for this potential pattern and also take a good look into some of the predicted values that do not make sex (Ex: -537 as a predicted birthweight). 
+
+**Cross-Validation**
+```{r}
+cv_df = 
+  crossv_mc(birthweight, 100)
+
+cv_df |> pull(train) |> nth(1) |> as_tibble()
+cv_df |> pull(test) |> nth(1) |> as_tibble()
+
+cv_df =
+  cv_df |> 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+
+cv_df = 
+  cv_df |> 
+  mutate(
+    my_mod  = map(train, \(df) lm(bwt ~ gaweeks + babysex + mheight + ppbmi + blength, data= df)),
+    simple_mod  = map(train, \(df) lm(bwt ~ gaweeks+ blength, 
+                                  data= df)),
+    interaction_mod  = map(train, \(df) lm(bwt ~ bhead*babysex*blength, 
+                                  data= df))) |> 
+  mutate(
+    rmse_my = map2_dbl(my_mod, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_simple = map2_dbl(simple_mod, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_interaction = map2_dbl(interaction_mod, test, \(mod, df) rmse(model = mod, data = df)))
+
+cv_df |> 
+  select(starts_with("rmse")) |> 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") |> 
+  mutate(model = fct_inorder(model)) |> 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+```
+**Analysis of RMSE**: My model sucked - a lot worse than I was expecting honestly. From looking at the RMSE Violin Plot we see that my model was marginally better than the simple model whereas the interaction based model had far lower rmse values signifying that the regression line was a better fit for the data. I did not expect my model to be as far off as it is. 
