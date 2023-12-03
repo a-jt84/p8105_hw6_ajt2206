@@ -37,7 +37,150 @@ library(mgcv)
 
 ``` r
 library(purrr)
+library(viridis)
 ```
+
+    ## Loading required package: viridisLite
+
+``` r
+knitr::opts_chunk$set(
+    echo = TRUE,
+    warning = FALSE,
+    fig.width = 8, 
+  fig.height = 6,
+  out.width = "90%"
+)
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+```
+
+### Problem 1
+
+In the data cleaning code below we create a `city_state` variable,
+change `victim_age` to numeric, modifiy victim_race to have categories
+white and non-white, with white as the reference category, and create a
+`resolution` variable indicating whether the homicide is solved. Lastly,
+we filtered out the following cities: Tulsa, AL; Dallas, TX; Phoenix,
+AZ; and Kansas City, MO; and we retained only the variables
+`city_state`, `resolution`, `victim_age`, `victim_sex`, and
+`victim_race`.
+
+``` r
+homicide_df = 
+  read_csv("data/homicide-data.csv", na = c("", "NA", "Unknown")) |> 
+  mutate(
+    city_state = str_c(city, state, sep = ", "),
+    victim_age = as.numeric(victim_age),
+    resolution = case_when(
+      disposition == "Closed without arrest" ~ 0,
+      disposition == "Open/No arrest"        ~ 0,
+      disposition == "Closed by arrest"      ~ 1)
+  ) |> 
+  filter(victim_race %in% c("White", "Black")) |> 
+  filter(!(city_state %in% c("Tulsa, AL", "Dallas, TX", "Phoenix, AZ", "Kansas City, MO"))) |> 
+  select(city_state, resolution, victim_age, victim_sex, victim_race)
+```
+
+    ## Rows: 52179 Columns: 12
+    ## ── Column specification ────────────────────────────────────────────────────────
+    ## Delimiter: ","
+    ## chr (8): uid, victim_last, victim_first, victim_race, victim_sex, city, stat...
+    ## dbl (4): reported_date, victim_age, lat, lon
+    ## 
+    ## ℹ Use `spec()` to retrieve the full column specification for this data.
+    ## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+
+Next we fit a logistic regression model using only data from Baltimore,
+MD. We model `resolved` as the outcome and `victim_age`, `victim_sex`,
+and `victim_race` as predictors. We save the output as `baltimore_glm`
+so that we can apply `broom::tidy` to this object and obtain the
+estimate and confidence interval of the adjusted odds ratio for solving
+homicides comparing non-white victims to white victims.
+
+``` r
+baltimore_glm = 
+  filter(homicide_df, city_state == "Baltimore, MD") |> 
+  glm(resolution ~ victim_age + victim_sex + victim_race, family = binomial(), data = _)
+
+baltimore_glm |> 
+  broom::tidy() |> 
+  mutate(
+    OR = exp(estimate), 
+    OR_CI_upper = exp(estimate + 1.96 * std.error),
+    OR_CI_lower = exp(estimate - 1.96 * std.error)) |> 
+  filter(term == "victim_sexMale") |> 
+  select(OR, OR_CI_lower, OR_CI_upper) |>
+  knitr::kable(digits = 3)
+```
+
+|    OR | OR_CI_lower | OR_CI_upper |
+|------:|------------:|------------:|
+| 0.426 |       0.325 |       0.558 |
+
+Below, by incorporating `nest()`, `map()`, and `unnest()` into the
+preceding Baltimore-specific code, we fit a model for each of the
+cities, and extract the adjusted odds ratio (and CI) for solving
+homicides comparing non-white victims to white victims. We show the
+first 5 rows of the resulting dataframe of model results.
+
+``` r
+model_results = 
+  homicide_df |> 
+  nest(data = -city_state) |> 
+  mutate(
+    models = map(data, \(df) glm(resolution ~ victim_age + victim_sex + victim_race, 
+                             family = binomial(), data = df)),
+    tidy_models = map(models, broom::tidy)) |> 
+  select(-models, -data) |> 
+  unnest(cols = tidy_models) |> 
+  mutate(
+    OR = exp(estimate), 
+    OR_CI_upper = exp(estimate + 1.96 * std.error),
+    OR_CI_lower = exp(estimate - 1.96 * std.error)) |> 
+  filter(term == "victim_sexMale") |> 
+  select(city_state, OR, OR_CI_lower, OR_CI_upper)
+
+model_results |>
+  slice(1:5) |> 
+  knitr::kable(digits = 3)
+```
+
+| city_state      |    OR | OR_CI_lower | OR_CI_upper |
+|:----------------|------:|------------:|------------:|
+| Albuquerque, NM | 1.767 |       0.831 |       3.761 |
+| Atlanta, GA     | 1.000 |       0.684 |       1.463 |
+| Baltimore, MD   | 0.426 |       0.325 |       0.558 |
+| Baton Rouge, LA | 0.381 |       0.209 |       0.695 |
+| Birmingham, AL  | 0.870 |       0.574 |       1.318 |
+
+Below we generate a plot of the estimated ORs and CIs for each city,
+ordered by magnitude of the OR from smallest to largest. From this plot
+we see that most cities have odds ratios that are smaller than 1,
+suggesting that crimes with male victims have smaller odds of resolution
+compared to crimes with female victims after adjusting for victim age
+and race. This disparity is strongest in New yrok. In roughly half of
+these cities, confidence intervals are narrow and do not contain 1,
+suggesting a significant difference in resolution rates by sex after
+adjustment for victim age and race.
+
+``` r
+model_results |> 
+  mutate(city_state = fct_reorder(city_state, OR)) |> 
+  ggplot(aes(x = city_state, y = OR)) + 
+  geom_point() + 
+  geom_errorbar(aes(ymin = OR_CI_lower, ymax = OR_CI_upper)) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+<img src="Homework-6_files/figure-gfm/q1_plot-1.png" width="90%" />
 
 # Problem 2
 
@@ -58,16 +201,16 @@ boot_straps |> pull(strap) |> nth(1) |> as_tibble()
     ## # A tibble: 365 × 6
     ##    name           id          date        prcp  tmax  tmin
     ##    <chr>          <chr>       <date>     <dbl> <dbl> <dbl>
-    ##  1 CentralPark_NY USW00094728 2022-08-31     0  29.4  20.6
-    ##  2 CentralPark_NY USW00094728 2022-09-10     0  30    17.8
-    ##  3 CentralPark_NY USW00094728 2022-02-17    79  20     9.4
-    ##  4 CentralPark_NY USW00094728 2022-09-27     0  21.1  15  
-    ##  5 CentralPark_NY USW00094728 2022-04-26     5  15.6  11.1
-    ##  6 CentralPark_NY USW00094728 2022-04-02     0  12.2   3.3
-    ##  7 CentralPark_NY USW00094728 2022-06-04     0  26.7  16.1
-    ##  8 CentralPark_NY USW00094728 2022-11-01    20  19.4  15  
-    ##  9 CentralPark_NY USW00094728 2022-05-06   175  16.1   9.4
-    ## 10 CentralPark_NY USW00094728 2022-01-05    58   8.3  -0.5
+    ##  1 CentralPark_NY USW00094728 2022-10-25     0  21.1  16.1
+    ##  2 CentralPark_NY USW00094728 2022-09-11    81  24.4  19.4
+    ##  3 CentralPark_NY USW00094728 2022-07-20     0  35    25.6
+    ##  4 CentralPark_NY USW00094728 2022-04-17     0  10.6   5  
+    ##  5 CentralPark_NY USW00094728 2022-01-21     0  -5.5  -9.9
+    ##  6 CentralPark_NY USW00094728 2022-03-01     0   8.9  -0.5
+    ##  7 CentralPark_NY USW00094728 2022-04-28     0  14.4   4.4
+    ##  8 CentralPark_NY USW00094728 2022-05-25     0  21.1  11.7
+    ##  9 CentralPark_NY USW00094728 2022-11-02     0  21.1  12.2
+    ## 10 CentralPark_NY USW00094728 2022-11-09     0  11.7   4.4
     ## # ℹ 355 more rows
 
 ``` r
@@ -89,25 +232,14 @@ combo = weather_df |>
   )
 ```
 
-    ## Warning: `unnest()` has a new interface. See `?unnest` for details.
-    ## ℹ Try `df %>% unnest(c(r_squared, results))`, with `mutate()` if needed.
-
-    ## Warning: There were 3351 warnings in `mutate()`.
-    ## The first warning was:
-    ## ℹ In argument: `log_12 = log(tmin) + log(prcp)`.
-    ## ℹ In group 1: `id = "0001"`.
-    ## Caused by warning in `log()`:
-    ## ! NaNs produced
-    ## ℹ Run `dplyr::last_dplyr_warnings()` to see the 3350 remaining warnings.
-
 **Description of Process**: I used the `modelr::bootstrap` function to
 more quickly perform bootstrapping.
 
 **Initial r_squared and log_12 descriptions** From brief glance at
 dataset, we have very high r_squared values throughout the bootstrapped
 dataframe. Regarding, log_12 values or the Log(Beta1\*Beta2) there are R
-`sum(is.nan(combo$log_12))`.” Non-Number values that show up due to the
-negative values of Beta_2 (the coeff for the prcp term).
+`sum(is.nan(combo[["log_12"]]))`.” Non-Number values that show up due to
+the negative values of Beta_2 (the coeff for the prcp term).
 
 ``` r
 combo |> 
@@ -117,7 +249,7 @@ combo |>
   theme_minimal()
 ```
 
-![](Homework-6_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+<img src="Homework-6_files/figure-gfm/unnamed-chunk-3-1.png" width="90%" />
 
 ``` r
 combo |> 
@@ -127,9 +259,7 @@ combo |>
   theme_minimal()
 ```
 
-    ## Warning: Removed 3351 rows containing non-finite values (`stat_density()`).
-
-![](Homework-6_files/figure-gfm/unnamed-chunk-3-2.png)<!-- -->
+<img src="Homework-6_files/figure-gfm/unnamed-chunk-3-2.png" width="90%" />
 **Description of R-Squared Plot**: the r-squared density plot is
 slightly left skewed and unimodal. the majority of the data occurs
 between a value of 0.90 and 0.94 with the largest peak at ~0.92. These
@@ -149,14 +279,14 @@ with(combo, quantile(r_squared, c(0.025, 0.50, 0.975), na.rm = TRUE))
 ```
 
     ##      2.5%       50%     97.5% 
-    ## 0.8884817 0.9178848 0.9400199
+    ## 0.8885617 0.9174401 0.9405191
 
 ``` r
 with(combo, quantile(log_12, c(0.025, 0.50, 0.975), na.rm = TRUE))
 ```
 
     ##      2.5%       50%     97.5% 
-    ## -9.097739 -5.872171 -4.612608
+    ## -8.894862 -5.868719 -4.572028
 
 **Note on 95% CI**: In order to provide a 95% CI for r_squared and
 log(beta1\*beta2), i used the `quantile` function. I pulled the quantile
@@ -26303,7 +26433,7 @@ birthweight |>
   ggplot(aes(x= pred, y=resid))+geom_point()
 ```
 
-![](Homework-6_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+<img src="Homework-6_files/figure-gfm/unnamed-chunk-6-1.png" width="90%" />
 \*\*Modelling Process\*: in order to select variables for my model, I
 decided to briefly search for common predictors of baby’s birthweight.
 The general consensus was that gestational age, fetal sex, mother’s
@@ -26342,8 +26472,8 @@ cv_df |> pull(train) |> nth(1) |> as_tibble()
     ##  4 Female     34      52  3374   156       5 White    41.6 absent        13
     ##  5 Male       33      52  3374   129      55 White    40.7 absent        12
     ##  6 Female     33      46  2523   126      96 Black    40.3 absent        14
-    ##  7 Male       36      52  3515   146      85 White    40.3 absent        11
-    ##  8 Male       33      50  3459   169      75 Black    40.7 absent        12
+    ##  7 Female     33      49  2778   140       5 White    37.4 absent        12
+    ##  8 Male       36      52  3515   146      85 White    40.3 absent        11
     ##  9 Female     35      51  3317   130      55 White    43.4 absent        13
     ## 10 Male       35      51  3459   146      55 White    39.4 absent        12
     ## # ℹ 3,462 more rows
@@ -26358,15 +26488,15 @@ cv_df |> pull(test) |> nth(1) |> as_tibble()
     ##    babysex bhead blength   bwt delwt fincome frace gaweeks malform menarche
     ##    <fct>   <int>   <int> <int> <int>   <int> <chr>   <dbl> <fct>      <int>
     ##  1 Male       34      52  3062   157      55 White    40   absent        14
-    ##  2 Female     33      49  2778   140       5 White    37.4 absent        12
-    ##  3 Female     35      48  3175   158      75 White    39.7 absent        13
-    ##  4 Male       36      53  3629   147      75 White    41.3 absent        11
-    ##  5 Female     35      50  3175   140      85 Black    40.6 absent        14
-    ##  6 Female     36      51  2977   135      45 White    41.7 absent        13
-    ##  7 Female     36      56  3685   170      95 White    40.3 absent        12
-    ##  8 Male       34      63  3175   143      25 White    41.9 absent        13
-    ##  9 Male       35      51  3345   145      75 White    41.3 absent        12
-    ## 10 Male       36      54  3402   161      95 White    40.1 absent        11
+    ##  2 Male       33      50  3459   169      75 Black    40.7 absent        12
+    ##  3 Male       35      56  3232   147      55 White    42.1 absent        13
+    ##  4 Female     34      51  3005   149      85 White    39.3 absent        14
+    ##  5 Female     34      51  3232   155      55 White    41.6 absent        15
+    ##  6 Female     33      49  3147   140      45 White    40.6 absent        12
+    ##  7 Female     34      49  3317   142      35 White    40.4 absent        12
+    ##  8 Female     34      49  3033   128      25 White    41.1 absent        12
+    ##  9 Male       33      51  3345   140      85 White    38.6 absent        13
+    ## 10 Male       34      52  3118   130      75 White    41   absent        12
     ## # ℹ 859 more rows
     ## # ℹ 8 more variables: mheight <int>, momage <int>, mrace <chr>, parity <int>,
     ## #   ppbmi <dbl>, ppwt <int>, smoken <dbl>, wtgain <int>
@@ -26402,7 +26532,7 @@ cv_df |>
   ggplot(aes(x = model, y = rmse)) + geom_violin()
 ```
 
-![](Homework-6_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+<img src="Homework-6_files/figure-gfm/unnamed-chunk-7-1.png" width="90%" />
 **Analysis of RMSE**: My model sucked - a lot worse than I was expecting
 honestly. From looking at the RMSE Violin Plot we see that my model was
 marginally better than the simple model whereas the interaction based
