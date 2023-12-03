@@ -151,7 +151,7 @@ combo = weather_df |>
 ```
 **Description of Process**: I used the `modelr::bootstrap` function to more quickly perform bootstrapping. 
 
-**Initial r_squared and log_12 descriptions** From brief glance at dataset, we have very high r_squared values throughout the bootstrapped dataframe. Regarding, log_12 values or the Log(Beta1*Beta2) there are R `sum(is.nan(combo[["log_12"]]))`." Non-Number values that show up due to the negative values of Beta_2 (the coeff for the prcp term).
+**Initial r_squared and log_12 descriptions** From brief glance at dataset, we have very high r_squared values throughout the bootstrapped dataframe. Regarding, log_12 values or the Log(Beta1*Beta2) there are `sum(is.nan(combo[["log_12"]]))` Non-Number values that show up due to the negative values of Beta_2 (the coeff for the prcp term).
 
 ```{r}
 combo |> 

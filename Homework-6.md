@@ -201,16 +201,16 @@ boot_straps |> pull(strap) |> nth(1) |> as_tibble()
     ## # A tibble: 365 × 6
     ##    name           id          date        prcp  tmax  tmin
     ##    <chr>          <chr>       <date>     <dbl> <dbl> <dbl>
-    ##  1 CentralPark_NY USW00094728 2022-10-25     0  21.1  16.1
-    ##  2 CentralPark_NY USW00094728 2022-09-11    81  24.4  19.4
-    ##  3 CentralPark_NY USW00094728 2022-07-20     0  35    25.6
-    ##  4 CentralPark_NY USW00094728 2022-04-17     0  10.6   5  
-    ##  5 CentralPark_NY USW00094728 2022-01-21     0  -5.5  -9.9
-    ##  6 CentralPark_NY USW00094728 2022-03-01     0   8.9  -0.5
-    ##  7 CentralPark_NY USW00094728 2022-04-28     0  14.4   4.4
-    ##  8 CentralPark_NY USW00094728 2022-05-25     0  21.1  11.7
-    ##  9 CentralPark_NY USW00094728 2022-11-02     0  21.1  12.2
-    ## 10 CentralPark_NY USW00094728 2022-11-09     0  11.7   4.4
+    ##  1 CentralPark_NY USW00094728 2022-04-16    51  22.8   6.7
+    ##  2 CentralPark_NY USW00094728 2022-02-02     0   8.3   0  
+    ##  3 CentralPark_NY USW00094728 2022-05-21     0  32.2  16.7
+    ##  4 CentralPark_NY USW00094728 2022-10-04   470  12.8   7.8
+    ##  5 CentralPark_NY USW00094728 2022-02-16     0   9.4  -2.1
+    ##  6 CentralPark_NY USW00094728 2022-09-11    81  24.4  19.4
+    ##  7 CentralPark_NY USW00094728 2022-11-24     0  12.2   4.4
+    ##  8 CentralPark_NY USW00094728 2022-12-19     0   3.9  -0.5
+    ##  9 CentralPark_NY USW00094728 2022-03-07     8  23.3  10  
+    ## 10 CentralPark_NY USW00094728 2022-08-27     0  32.2  23.3
     ## # ℹ 355 more rows
 
 ``` r
@@ -237,8 +237,8 @@ more quickly perform bootstrapping.
 
 **Initial r_squared and log_12 descriptions** From brief glance at
 dataset, we have very high r_squared values throughout the bootstrapped
-dataframe. Regarding, log_12 values or the Log(Beta1\*Beta2) there are R
-`sum(is.nan(combo[["log_12"]]))`.” Non-Number values that show up due to
+dataframe. Regarding, log_12 values or the Log(Beta1\*Beta2) there are
+`sum(is.nan(combo[["log_12"]]))` Non-Number values that show up due to
 the negative values of Beta_2 (the coeff for the prcp term).
 
 ``` r
@@ -279,14 +279,14 @@ with(combo, quantile(r_squared, c(0.025, 0.50, 0.975), na.rm = TRUE))
 ```
 
     ##      2.5%       50%     97.5% 
-    ## 0.8885617 0.9174401 0.9405191
+    ## 0.8886338 0.9178131 0.9405702
 
 ``` r
 with(combo, quantile(log_12, c(0.025, 0.50, 0.975), na.rm = TRUE))
 ```
 
     ##      2.5%       50%     97.5% 
-    ## -8.894862 -5.868719 -4.572028
+    ## -8.766551 -5.888087 -4.565831
 
 **Note on 95% CI**: In order to provide a 95% CI for r_squared and
 log(beta1\*beta2), i used the `quantile` function. I pulled the quantile
@@ -26467,13 +26467,13 @@ cv_df |> pull(train) |> nth(1) |> as_tibble()
     ##    babysex bhead blength   bwt delwt fincome frace gaweeks malform menarche
     ##    <fct>   <int>   <int> <int> <int>   <int> <chr>   <dbl> <fct>      <int>
     ##  1 Female     34      51  3629   177      35 White    39.9 absent        13
-    ##  2 Male       34      48  3062   156      65 Black    25.9 absent        14
-    ##  3 Female     36      50  3345   148      85 White    39.9 absent        12
+    ##  2 Female     36      50  3345   148      85 White    39.9 absent        12
+    ##  3 Male       34      52  3062   157      55 White    40   absent        14
     ##  4 Female     34      52  3374   156       5 White    41.6 absent        13
     ##  5 Male       33      52  3374   129      55 White    40.7 absent        12
     ##  6 Female     33      46  2523   126      96 Black    40.3 absent        14
     ##  7 Female     33      49  2778   140       5 White    37.4 absent        12
-    ##  8 Male       36      52  3515   146      85 White    40.3 absent        11
+    ##  8 Male       33      50  3459   169      75 Black    40.7 absent        12
     ##  9 Female     35      51  3317   130      55 White    43.4 absent        13
     ## 10 Male       35      51  3459   146      55 White    39.4 absent        12
     ## # ℹ 3,462 more rows
@@ -26487,16 +26487,16 @@ cv_df |> pull(test) |> nth(1) |> as_tibble()
     ## # A tibble: 869 × 18
     ##    babysex bhead blength   bwt delwt fincome frace gaweeks malform menarche
     ##    <fct>   <int>   <int> <int> <int>   <int> <chr>   <dbl> <fct>      <int>
-    ##  1 Male       34      52  3062   157      55 White    40   absent        14
-    ##  2 Male       33      50  3459   169      75 Black    40.7 absent        12
-    ##  3 Male       35      56  3232   147      55 White    42.1 absent        13
-    ##  4 Female     34      51  3005   149      85 White    39.3 absent        14
-    ##  5 Female     34      51  3232   155      55 White    41.6 absent        15
-    ##  6 Female     33      49  3147   140      45 White    40.6 absent        12
-    ##  7 Female     34      49  3317   142      35 White    40.4 absent        12
-    ##  8 Female     34      49  3033   128      25 White    41.1 absent        12
-    ##  9 Male       33      51  3345   140      85 White    38.6 absent        13
-    ## 10 Male       34      52  3118   130      75 White    41   absent        12
+    ##  1 Male       34      48  3062   156      65 Black    25.9 absent        14
+    ##  2 Male       36      52  3515   146      85 White    40.3 absent        11
+    ##  3 Male       36      53  3629   147      75 White    41.3 absent        11
+    ##  4 Female     33      49  2948   129      25 White    41   absent        13
+    ##  5 Female     35      52  3289   135      55 White    40.6 absent        13
+    ##  6 Female     35      53  3600   141      35 White    42.3 absent        14
+    ##  7 Male       35      52  3232   121      75 Asian    42.3 absent        13
+    ##  8 Female     33      49  3147   140      45 White    40.6 absent        12
+    ##  9 Male       35      51  3147   165      65 White    40.1 absent        13
+    ## 10 Female     35      52  3487   121      45 White    39.9 absent        11
     ## # ℹ 859 more rows
     ## # ℹ 8 more variables: mheight <int>, momage <int>, mrace <chr>, parity <int>,
     ## #   ppbmi <dbl>, ppwt <int>, smoken <dbl>, wtgain <int>
